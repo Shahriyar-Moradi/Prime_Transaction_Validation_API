@@ -1,0 +1,11 @@
+fastapi
+python-multipart
+uvicorn
+transformers
+PyMuPDF
+python-dotenv
+openai
+Pillow
+pydantic
+torch
+opencv-python
