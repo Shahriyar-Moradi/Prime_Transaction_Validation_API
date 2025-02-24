@@ -11,6 +11,8 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from openai import OpenAI
 from transformers import pipeline
 
+from dotenv import load_dotenv
+load_dotenv()
 
 app = FastAPI(title="Receipt Analyzer API")
 
