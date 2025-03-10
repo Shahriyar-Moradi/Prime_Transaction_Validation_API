@@ -14,12 +14,12 @@ from transformers import pipeline
 from dotenv import load_dotenv
 load_dotenv()
 
-app = FastAPI(title="Receipt Analyzer API")
+app = FastAPI(title="Receipt Analyzer API ")
 
 # Zero-Shot Classifier (CLIP model)
 model_name = "openai/clip-vit-large-patch14-336"
 classifier = pipeline("zero-shot-image-classification", model=model_name)
-labels = ["Transaction receipt", "other"]
+labels = ["Transaction receipt", "An image that is not a transaction receipt","exchange trade rate","other"]
 CONFIDENCE_THRESHOLD = 0.7
 
 client = OpenAI(api_key='OPENAI_API_KEY')
@@ -122,7 +122,9 @@ def extract_transaction_data(final_image_path: str) -> str:
     base64_image = encode_image_to_base64(final_image_path)
     
     response = client.chat.completions.create(
-        model="gpt-4o",
+        # model="gpt-4o",
+        # model='o1',
+        model="gpt-4.5-preview",
         messages=[
             {
                 "role": "system",
