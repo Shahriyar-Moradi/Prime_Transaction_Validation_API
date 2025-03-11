@@ -12,6 +12,8 @@ from openai import OpenAI
 from transformers import pipeline
 
 from dotenv import load_dotenv
+
+import anthropic
 load_dotenv()
 
 app = FastAPI(title="Receipt Analyzer API ")
@@ -23,6 +25,9 @@ labels = ["Transaction receipt", "An image that is not a transaction receipt","e
 CONFIDENCE_THRESHOLD = 0.7
 
 client = OpenAI(api_key='OPENAI_API_KEY')
+
+ANTHROPIC_API_KEY='ANTHROPIC_API_KEY'
+anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
 def encode_image_to_base64(image_path):
