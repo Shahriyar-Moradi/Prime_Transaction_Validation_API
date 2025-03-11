@@ -25,6 +25,11 @@ CONFIDENCE_THRESHOLD = 0.7
 client = OpenAI(api_key='OPENAI_API_KEY')
 
 
+def encode_image_to_base64(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
+
 def convert_pdf_if_needed(upload_file: UploadFile, output_folder="converted_images") -> str:
     """
     If the file is a PDF, convert the first page to PNG using PyMuPDF.
@@ -56,13 +61,6 @@ def encode_image_to_base64(image_path: str) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-# EXAMPLE_IMAGE_1 = "/home/shahriar/Work/AbanTether/cluad/qwen/img3.jpeg"
-# EXAMPLE_IMAGE_2 = "/home/shahriar/Work/AbanTether/cluad/qwen/img4.jpg"
-# EXAMPLE_IMAGE_3 = "/home/shahriar/Work/AbanTether/cluad/qwen/img2.jpeg"
-
-# example_receipt_1_base64 = encode_image_to_base64(EXAMPLE_IMAGE_1)
-# example_receipt_2_base64 = encode_image_to_base64(EXAMPLE_IMAGE_2)
-# example_receipt_3_base64 = encode_image_to_base64(EXAMPLE_IMAGE_3)
 
 import os
 
@@ -79,31 +77,44 @@ example_receipt_2_base64 = encode_image_to_base64(EXAMPLE_IMAGE_2)
 example_receipt_3_base64 = encode_image_to_base64(EXAMPLE_IMAGE_3)
 
 
-def extract_transaction_data(final_image_path: str) -> str:
+def generate_base_filename(transaction_data):
+    # Try to extract date from transaction data
+    try:
+        date_match = re.search(r'\d{1,4}[-/]\d{1,2}[-/]\d{1,4}', transaction_data)
+        if date_match:
+            date_str = date_match.group().replace('/', '-')
+        else:
+            date_str = datetime.now().strftime('%Y-%m-%d')
+    except (TypeError, AttributeError):
 
-    base64_image = encode_image_to_base64(final_image_path)
+        date_str = datetime.now().strftime('%Y-%m-%d')
+
+    timestamp = datetime.now().strftime('%H%M%S')
     
-    response = client.chat.completions.create(
-        # model="gpt-4o",
-        # model='o1',
-        model="gpt-4.5-preview",
+    return f"receipt_{date_str}_{timestamp}"
+
+
+def extract_transaction_data(image_path):
+    base64_image = encode_image_to_base64(image_path)
+    
+    response = anthropic_client.messages.create(
+        model="claude-3-7-sonnet-20250219",
+        max_tokens=1024,
         messages=[
             {
-                "role": "system",
+                "role": "assistant",
                 "content": (
-                    "You are a helpful assistant who works in an Iranian bank as a professional banker. "
-                    "You can read Persian text from images and extract it accurately. "
-                    "We will provide example images with the correct extracted text, then you'll get a new image. "
-                    "Extract these details:\n"
-                    "- Date and Time\n"
-                    "- Amount\n"
-                    "- Merchant/Recipient\n"
-                    "- Transaction Type\n"
-                    "- Reference Number\n"
-                    "Return a clear textual format (not JSON)."
+                    '''You are a helpful assistant who work in Iran's bank as professional banker that can read Persian text from images and extract and OCR it accurately. "
+                    "We will provide example images with the correct extracted text. Then you'll get a new image "
+                    and should provide the extracted text in Persian, Extract the following transaction details:
+                    - Date and Time
+                    - Amount
+                    - Merchant/Recipient
+                    - Transaction Type
+                    - Reference Number (if any)
+                    Return in a clear, structured format.'''            
                 ),
             },
-            # Example 1
             {
                 "role": "user",
                 "content": [
@@ -123,15 +134,15 @@ def extract_transaction_data(final_image_path: str) -> str:
                         ),
                     },
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{example_receipt_1_base64}",
-                            "detail": "high",
-                        }
-                    }
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": example_receipt_1_base64,
+                        },
+                    },
                 ]
             },
-            # Example 2
             {
                 "role": "user",
                 "content": [
@@ -151,15 +162,15 @@ def extract_transaction_data(final_image_path: str) -> str:
                         ),
                     },
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{example_receipt_2_base64}",
-                            "detail": "high",
-                        }
-                    }
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": example_receipt_2_base64,
+                        },
+                    },
                 ]
             },
-            # Example 3
             {
                 "role": "user",
                 "content": [
@@ -172,22 +183,22 @@ def extract_transaction_data(final_image_path: str) -> str:
                             "نوع انتقال: انتقال ساتنا\n"
                             "شماره شبا برداشت: IR۶۵۰۶۰۰۵۲۰۶۰۱۰۰۰۹۳۳۰۵۱۰۰۱\n"
                             "مبلغ : ۱,۱۰۰,۰۰۰,۰۰۰ ریال\n"
-                            "تاریخ : مشخض نیست\n"
+                            "تاریخ : مشخض نیست \n"
                             "نام و نام خانوادگی : الکام توسعه اماد\n"
                             "بابت: پرداخت قرض و تأدیه دیون\n"
                             "نام بانک: بانک قرض الحسنه مهر ایران\n"
                         ),
                     },
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{example_receipt_3_base64}",
-                            "detail": "high",
-                        }
-                    }
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": example_receipt_3_base64,
+                        },
+                    },
                 ]
             },
-            # The new image
             {
                 "role": "user",
                 "content": [
@@ -195,55 +206,118 @@ def extract_transaction_data(final_image_path: str) -> str:
                         "type": "text",
                         "text": (
                             "Now process this **NEW receipt** image. "
-                            "Please extract the Persian text in the same style. "
-                            "But do NOT return JSON—just a structured text with the fields."
+                            "Please extract the Persian text in the same style."
                         )
                     },
                     {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{base64_image}",
-                            "detail": "high",
-                        }
-                    }
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": base64_image,
+                        },
+                    },
                 ]
             },
-        ],
-        max_tokens=600,
-        temperature=0.2,
+        ]
     )
-    return response.choices[0].message.content
+
+    try:
+        # Anthropic response structure has content that contains the actual text
+        return response.content[0].text
+    except (AttributeError, IndexError, TypeError) as e:
+        print(f"Error extracting content from response: {e}")
+        print(f"Response structure: {response}")
+        # Return a fallback value
+        return "Error extracting transaction data"
+
+
+# def parse_extracted_text(gpt_text: str) -> dict:
+#     """
+#     Extract fields from the raw Persian text returned by GPT.
+#     Adjust patterns as needed for your actual LLM output.
+#     """
+#     data = {
+#         "date_time": None,
+#         "amount": None,
+#         "merchant": None,
+#         "transaction_type": None,
+#         "reference_number": None
+#     }
+    
+#     # Regex patterns: update to match your GPT output style
+#     patterns = {
+#         "transaction_type": r"نوع انتقال:\s*(.*)",
+#         "amount": r"مبلغ:\s*(.*)",
+#         "date_time": r"تاریخ:\s*(.*)",
+#         "paid by": r"نام و نام خانوادگی:\s*(.*)",
+#         # Could also match شناسه پرداخت, شماره تراکنش, مرجع, etc.
+#         "reference_number": r"(?:شناسه پرداخت|شماره تراکنش|مرجع):\s*(.*)"
+#     }
+    
+#     for field, pattern in patterns.items():
+#         match = re.search(pattern, gpt_text)
+#         if match:
+#             data[field] = match.group(1).strip()
+    
+#     return data
 
 
 def parse_extracted_text(gpt_text: str) -> dict:
-    """
-    Extract fields from the raw Persian text returned by GPT.
-    Adjust patterns as needed for your actual LLM output.
-    """
+
     data = {
         "date_time": None,
         "amount": None,
         "merchant": None,
-        "transaction_type": None,
-        "reference_number": None
+        # "transaction_type": None,
+        # "reference_number": None,
+        # "purpose": None,
+        # "fee": None,
+        # "total_amount": None
     }
     
-    # Regex patterns: update to match your GPT output style
-    patterns = {
-        "transaction_type": r"نوع انتقال:\s*(.*)",
-        "amount": r"مبلغ:\s*(.*)",
-        "date_time": r"تاریخ:\s*(.*)",
-        "paid by": r"نام و نام خانوادگی:\s*(.*)",
-        # Could also match شناسه پرداخت, شماره تراکنش, مرجع, etc.
-        "reference_number": r"(?:شناسه پرداخت|شماره تراکنش|مرجع):\s*(.*)"
-    }
-    
-    for field, pattern in patterns.items():
-        match = re.search(pattern, gpt_text)
-        if match:
-            data[field] = match.group(1).strip()
+    # Try to find the markdown block with transaction details.
+    markdown_start = gpt_text.find("**Transaction Details:**")
+    if markdown_start != -1:
+        markdown_block = gpt_text[markdown_start:]
+        # This regex looks for lines like:
+        # - **Field Name:** value
+        matches = re.findall(r'^\s*-\s*\*\*(.+?)\*\*:\s*(.+)$', markdown_block, re.MULTILINE)
+        # Map the field names from GPT to our dictionary keys
+        mapping = {
+            "Date and Time": "date_time",
+            "Amount": "amount",
+            "Merchant/Recipient": "merchant",
+            # "Transaction Type": "transaction_type",
+            # "Reference Number": "reference_number",
+            # "Purpose": "purpose",
+            # "Fee": "fee",
+            # "Total Amount": "total_amount"
+        }
+        for field, value in matches:
+            field = field.strip()
+            value = value.strip()
+            if field in mapping:
+                data[mapping[field]] = value
+    else:
+        # Fallback: Use regex patterns on the raw text if markdown block is missing
+        patterns = {
+            "transaction_type": r"نوع انتقال\s*:\s*(.+)",
+            "amount": r"مبلغ(?: اصل حواله)?\s*:\s*(.+)",
+            "date_time": r"(?:تاریخ(?: صدور| اجرا)?|تاریخ)\s*:\s*(.+)",
+            "merchant": r"(?:نام صاحب حساب|نام و نام خانوادگی)\s*:\s*(.+)",
+            # "reference_number": r"(?:کد رهگیری|شناسه گیرنده|شماره حساب گیرنده)\s*:\s*(.+)",
+            # "purpose": r"بابت\s*:\s*(.+)",
+            # "fee": r"مبلغ کارمزد حواله\s*:\s*(.+)",
+            # "total_amount": r"کل مبلغ سود/اضافی از حساب\s*:\s*(.+)"
+        }
+        for field, pattern in patterns.items():
+            match = re.search(pattern, gpt_text)
+            if match:
+                data[field] = match.group(1).strip()
     
     return data
+
 
 
 def generate_base_filename(transaction_data: str) -> str:
@@ -289,9 +363,6 @@ async def analyze_receipt(file: UploadFile = File(...)):
         # Step A: Convert PDF if needed
         converted_path = convert_pdf_if_needed(file)
         
-        # Step B: Preprocess
-        # final_image_path = preprocess_image(converted_path)
-        
         # Step C: Zero-shot classification
         scores = classifier(converted_path, candidate_labels=labels)
         top_label = scores[0]['label']
@@ -302,9 +373,12 @@ async def analyze_receipt(file: UploadFile = File(...)):
         
         # Step D: GPT extraction => raw text
         gpt_raw_text = extract_transaction_data(converted_path)
+        # gpt_raw_text = extract_transaction_data(converted_path)
+        print("Raw GPT Output:\n", gpt_raw_text)
         
         # Step E: Parse fields into a dictionary
         extracted_details = parse_extracted_text(gpt_raw_text)
+        
         
         # Step F: Save raw text + image
         text_filepath, image_filepath = save_files(gpt_raw_text, converted_path)
