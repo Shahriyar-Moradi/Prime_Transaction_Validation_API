@@ -47,6 +47,19 @@ def convert_pdf_if_needed(upload_file: UploadFile, output_folder="converted_imag
     else:
         return temp_path
 
+def preprocess_image(input_path: str) -> str:
+    original = cv2.imread(input_path)
+    if original is None:
+        raise ValueError("Failed to load the image. Possibly invalid file.")
+    
+    gray = to_grayscale(original)
+    enhanced = enhance_contrast(gray)
+    thresh = threshold_image(enhanced)
+    denoised = denoise_image(thresh)
+    
+    final_path = input_path + "_processed.png"
+    cv2.imwrite(final_path, denoised)
+    return final_path
 
 def encode_image_to_base64(image_path: str) -> str:
     """
@@ -290,10 +303,10 @@ async def analyze_receipt(file: UploadFile = File(...)):
         converted_path = convert_pdf_if_needed(file)
         
         # Step B: Preprocess
-        # final_image_path = preprocess_image(converted_path)
+        final_image_path = preprocess_image(converted_path)
         
         # Step C: Zero-shot classification
-        scores = classifier(converted_path, candidate_labels=labels)
+        scores = classifier(final_image_path, candidate_labels=labels)
         top_label = scores[0]['label']
         top_score = scores[0]['score']
         
@@ -301,13 +314,13 @@ async def analyze_receipt(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Not a valid transaction receipt.")
         
         # Step D: GPT extraction => raw text
-        gpt_raw_text = extract_transaction_data(converted_path)
+        gpt_raw_text = extract_transaction_data(final_image_path)
         
         # Step E: Parse fields into a dictionary
         extracted_details = parse_extracted_text(gpt_raw_text)
         
         # Step F: Save raw text + image
-        text_filepath, image_filepath = save_files(gpt_raw_text, converted_path)
+        text_filepath, image_filepath = save_files(gpt_raw_text, final_image_path)
         
         # Step G: Return only the parsed fields
         return {
